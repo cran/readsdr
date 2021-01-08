@@ -1,7 +1,7 @@
 Package: readsdr
 Type: Package
 Title: Translate Models from System Dynamics Software into 'R'
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person("Jair", "Andrade", email = "jair.albert.andrade@gmail.com", 
                   role = c("aut", "cre"),
                   comment = c(ORCID = "0000-0002-1412-7868"))
@@ -17,12 +17,12 @@ LazyData: true
 RoxygenNote: 7.1.0
 Suggests: testthat (>= 2.1.0), igraph, knitr, rmarkdown, ggplot2, tidyr
 Imports: stringr, xml2, purrr, dplyr, rlang, stringi, magrittr, stats,
-        deSolve
+        deSolve, parallel
 BugReports: https://github.com/jandraor/readsdr/issues
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2020-06-07 11:33:08 UTC; jairandrade
+Packaged: 2021-01-08 13:51:14 UTC; jandraor
 Author: Jair Andrade [aut, cre] (<https://orcid.org/0000-0002-1412-7868>)
 Maintainer: Jair Andrade <jair.albert.andrade@gmail.com>
 Repository: CRAN
-Date/Publication: 2020-06-12 08:10:03 UTC
+Date/Publication: 2021-01-08 16:00:02 UTC

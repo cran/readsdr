@@ -41,3 +41,231 @@ sd_simulate <- function(ds_inputs, start_time = NULL, stop_time = NULL,
 
   data.frame(results)
 }
+
+#' Perform a sensitivity run on a System Dynamics model
+#'
+#' \code{sd_sensitivity_run} returns a data frame with the simulation of a
+#' model for several iterations of different inputs.
+#'
+#' @param consts_df A data frame that contains the values of constants to
+#'   simulate. Each column corresponds to a constant and each row to an
+#'   iteration.
+#' @param stocks_df A data frame that containts the initial value of stocks to
+#' be explored. Each column corresponds to a stock and each row to an iteration.
+#'
+#' @param multicore A boolean value that indicates whether the process
+#' is parallelised. This option only works for Unix-based systems.
+#' @param n_cores An integer.
+#' @inheritParams sd_simulate
+#'
+#' @return A data frame
+#' @export
+#'
+#' @examples
+#' path      <- system.file("models", "SIR.stmx", package = "readsdr")
+#' ds_inputs <- xmile_to_deSolve(path)
+#' consts_df <- data.frame(i = c(0.25, 0.30))
+#' sd_sensitivity_run(ds_inputs, consts_df)
+sd_sensitivity_run <- function(ds_inputs, consts_df = NULL, stocks_df = NULL,
+                               start_time = NULL, stop_time = NULL,
+                               timestep = NULL, integ_method = "euler",
+                               multicore = FALSE,
+                               n_cores = NULL) {
+
+  if(!(integ_method %in% c("euler", "rk4"))) stop("Invalid integration method")
+
+  if(is.null(start_time)) start_time  <- ds_inputs$sim_params$start
+  if(is.null(stop_time))  stop_time   <- ds_inputs$sim_params$stop
+  if(is.null(timestep))   timestep    <- ds_inputs$sim_params$dt
+
+  # Create time vector
+  simtime     <- seq(start_time, stop_time, by = timestep)
+
+  ode_args <- list(y      = NULL,
+                   times  = simtime,
+                   func   = ds_inputs$func,
+                   parms  = NULL,
+                   method = integ_method)
+
+  if("graph_funs" %in% names(ds_inputs)) {
+    ode_args$graph_funs <- ds_inputs$graph_funs
+  }
+
+  consts_names <- names(ds_inputs$consts)
+  stocks_names <- names(ds_inputs$stocks)
+
+
+  #-----------------------------------------------------------------------------
+  if(!is.null(consts_df)) {
+    sens_consts     <- colnames(consts_df)
+    missing_consts  <- consts_names[!consts_names %in% sens_consts]
+
+    if(length(missing_consts) > 0) {
+      consts_df <- fill_df(consts_df, missing_consts, ds_inputs$consts)
+    }
+
+    const_sensitivity_list <- do.call(function(...) Map(list,...), consts_df)
+
+  }else {
+    ode_args$parms <- ds_inputs$consts
+  }
+  #-----------------------------------------------------------------------------
+
+  #-----------------------------------------------------------------------------
+  if(!is.null(stocks_df)) {
+    sens_stocks     <- colnames(stocks_df)
+    missing_stocks  <- stocks_names[!stocks_names %in% sens_stocks]
+
+    if(length(missing_stocks) > 0) {
+      stocks_df <- fill_df(stocks_df, missing_stocks, ds_inputs$stocks)
+    }
+
+    stocks_df              <- stocks_df[, c(stocks_names), drop = FALSE]
+    stock_sensitivity_list <- do.call(function(...) Map(list,...), stocks_df)
+
+  } else {
+    ode_args$y <- ds_inputs$stocks
+  }
+
+  #-----------------------------------------------------------------------------
+
+  if(!is.null(consts_df) & is.null(stocks_df)) {
+    iters   <- nrow(consts_df)
+    df_list <- const_sensitivity(const_sensitivity_list, ode_args, multicore,
+                                 n_cores)
+  }
+
+  if(is.null(consts_df) & !is.null(stocks_df)) {
+    iters   <- nrow(stocks_df)
+    df_list <- stock_sensitivity(stock_sensitivity_list, ode_args, multicore,
+                                 n_cores)
+  }
+
+  if(!is.null(consts_df) & !is.null(stocks_df)) {
+    row_consts <- nrow(consts_df)
+    row_stocks <- nrow(stocks_df)
+
+    if(row_consts != row_stocks) {
+      stop("the number of rows in both data frames (consts & stocks) must be of equal size", call. = FALSE)
+    }
+
+    iters   <- nrow(consts_df)
+    df_list <- const_stock_sensitivity(const_sensitivity_list,
+                                       stock_sensitivity_list,
+                                       ode_args, multicore, n_cores)
+  }
+
+  sensitivity_df       <- do.call("rbind", df_list)
+  sensitivity_df$iter  <- rep(1:iters, each = length(simtime))
+  sensitivity_df
+}
+
+const_sensitivity <- function(const_sensitivity_list, ode_args, multicore,
+                              n_cores) {
+
+  if(multicore) {
+
+    if(is.null(n_cores)) n_cores <- parallel::detectCores() - 1
+
+    if(n_cores > 1) {
+
+      if(!check_win()) {
+
+        df_list <- parallel::mclapply(const_sensitivity_list, do_const_sens,
+                                      mc.cores = n_cores,
+                                      ode_args = ode_args)
+        return(df_list)
+      }
+    }
+  }
+
+  df_list <- lapply(const_sensitivity_list, do_const_sens, ode_args = ode_args)
+}
+
+do_const_sens <- function(const_list, ode_args) {
+   ode_args$parms <- unlist(const_list)
+   result_matrix  <- do.call(deSolve::ode, ode_args)
+   data.frame(result_matrix)
+}
+
+stock_sensitivity <- function(stock_sensitivity_list, ode_args, multicore,
+                              n_cores) {
+
+  if(multicore) {
+
+    if(is.null(n_cores)) n_cores <- parallel::detectCores() - 1
+
+    if(n_cores > 1) {
+
+      if(!check_win()) {
+        df_list <- parallel::mclapply(stock_sensitivity_list, do_init_sens,
+                                      mc.cores = n_cores,
+                                      ode_args = ode_args)
+        return(df_list)
+      }
+    }
+  }
+
+  df_list <- lapply(stock_sensitivity_list, do_init_sens, ode_args = ode_args)
+}
+
+do_init_sens <- function(stock_list, ode_args) {
+  ode_args$y     <- unlist(stock_list)
+  result_matrix  <- do.call(deSolve::ode, ode_args)
+  data.frame(result_matrix)
+}
+
+const_stock_sensitivity <- function(const_sensitivity_list,
+                                    stock_sensitivity_list, ode_args,
+                                    multicore, n_cores) {
+
+  sens_list <- Map(list, const_sensitivity_list, stock_sensitivity_list)
+
+  if(multicore) {
+
+    if(is.null(n_cores)) n_cores <- parallel::detectCores() - 1
+
+    if(n_cores > 1) {
+
+      if(!check_win()) {
+        df_list <- parallel::mclapply(sens_list, do_const_init_sens,
+                                      mc.cores = n_cores,
+                                      ode_args = ode_args)
+        return(df_list)
+      }
+    }
+  }
+
+  df_list <- lapply(sens_list, do_const_init_sens, ode_args = ode_args)
+}
+
+do_const_init_sens <- function(sens_list, ode_args) {
+  const_list     <- sens_list[1]
+  stock_list     <- sens_list[2]
+  ode_args$y     <- unlist(stock_list)
+  ode_args$parms <- unlist(const_list)
+  result_matrix  <- do.call(deSolve::ode, ode_args)
+  data.frame(result_matrix)
+}
+
+fill_df <- function(df, missing, elems) {
+
+  for(ms in missing) {
+    df[ms] <- elems[ms]
+  }
+
+  df
+}
+
+check_win <- function() {
+  is_win <- FALSE
+
+  if(.Platform$OS.type == "windows") {
+    warning("This function does not suppport parallelisation in Windows",
+            .call = FALSE)
+    is_win <- TRUE
+  }
+  is_win
+}
+
+

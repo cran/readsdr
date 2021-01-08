@@ -205,6 +205,24 @@ test_that("sanitise_aux_equation() ignores the correct equal operator", {
   expect_equal(actual_val, expected_val)
 })
 
+test_that("sanitise_aux_equation() translates joint IF & NOT statements from Stella ", {
+  actual_val <- sanitise_aux_equation('IF(NOT (TIME = 3)) THEN 0 ELSE 1', "isee")
+  expected_val <- 'ifelse(!(time==3),0,1)'
+  expect_equal(actual_val, expected_val)
+})
+
+test_that("sanitise_aux_equation() translates ABS from Vensim", {
+  actual_val   <- sanitise_aux_equation('ABS(a,b)', "Vensim")
+  expected_val <- 'abs(a,b)'
+  expect_equal(actual_val, expected_val)
+})
+
+test_that("sanitise_aux_equation() translates ABS from Stella", {
+  actual_val   <- sanitise_aux_equation('ABS(a,b)', "isee")
+  expected_val <- 'abs(a,b)'
+  expect_equal(actual_val, expected_val)
+})
+
 #===============================================================================
 test_that("eval_constant_expr() returns the value of a constant expression", {
   test_equation <- "2 + 2"
@@ -302,4 +320,9 @@ test_that("safe_read() throws an error for invalid xml", {
   expect_error(safe_read(filepath), "Invalid XML file")
 })
 
+# sanitise_arrays()=============================================================
 
+test_that("sanitise_arrays() returns the expected value", {
+  expect_equal(sanitise_arrays("Population[B]*growth_rate[A]", "isee"),
+               "Population_B*growth_rate_A")
+})

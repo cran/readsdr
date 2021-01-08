@@ -9,6 +9,11 @@
 #' @param filepath A string that indicates a path to a file with extension .stmx
 #'   or .xmile. Vensim files (.mdl) are not xmile files. They must be exported
 #'   from Vensim with extension .xmile
+#' @param stock_list A list in which each element's name is the name of the
+#' stock to override and the element's value correspond to the new init value.
+#'
+#' @param const_list A list in which each element's name is the name of the
+#' constant to override and the element's value correspond to the new value.
 #'
 #' @return This function returns a list with three elements. The first element,
 #' \emph{description}, is a list that contains the simulation parameters, and
@@ -22,9 +27,26 @@
 #' @examples
 #' path <- system.file("models", "SIR.stmx", package = "readsdr")
 #' read_xmile(path)
-read_xmile <- function(filepath) {
+read_xmile <- function(filepath, stock_list = NULL, const_list = NULL) {
 
   model_structure    <- extract_structure_from_XMILE(filepath)
+
+  if(!is.null(stock_list)) {
+    stocks_override <- names(stock_list)
+    lvl_names       <- sapply(model_structure$levels,
+                              function(lvl_obj) lvl_obj$name)
+
+    for(i in seq_len(length(stock_list))) {
+      stk                                   <- stocks_override[[i]]
+      pos_stk                               <- which(stk == lvl_names)
+      model_structure$levels[[pos_stk]]$initValue <- stock_list[[stk]]
+    }
+  }
+
+  if(!is.null(const_list)) {
+    model_structure <- override_consts(model_structure, const_list)
+  }
+
   deSolve_components <- get_deSolve_elems(model_structure)
 
   igraph_inputs      <- tryCatch(
@@ -69,4 +91,24 @@ read_xmile <- function(filepath) {
 xmile_to_deSolve <- function(filepath) {
   model_structure    <- extract_structure_from_XMILE(filepath)
   deSolve_components <- get_deSolve_elems(model_structure)
+}
+
+override_consts <- function(mdl_structure, const_list) {
+  consts_override <- names(const_list)
+  const_names     <- sapply(mdl_structure$constants,
+                            function(const_obj) const_obj$name)
+
+  for(i in seq_len(length(const_list))) {
+    cst     <- consts_override[[i]]
+    pos_cst <- which(cst == const_names)
+
+    if(length(pos_cst) == 0) {
+      msg <- paste0("Can't find constant: ", cst)
+      stop(msg, call. = FALSE)
+    }
+
+    mdl_structure$constants[[pos_cst]]$value <- const_list[[cst]]
+  }
+
+  mdl_structure
 }

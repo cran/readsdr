@@ -26,6 +26,24 @@ test_model <-
       </doc1>
     </root>'
 
+smooth1_xml <-  xml2::read_xml(
+  '<root>
+     <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
+       <header>
+		     <vendor>isee systems, inc.</vendor>
+		   </header>
+	     <sim_specs>
+	       <start>0</start>
+		     <stop>4</stop>
+		     <dt reciprocal="true">4</dt>
+	     </sim_specs>
+	     <variables>
+         <aux name="S1">
+           <eqn>SMTH1(0.5,  5,  1)</eqn>
+         </aux>
+       </variables>
+     </doc1>
+   </root>')
 
 # create_param_obj_xmile()------------------------------------------------------
 
@@ -37,213 +55,6 @@ test_that("create_param_obj_xmile() returns the expected DT", {
   expect_equal(output$dt, 0.25)
 })
 
-
-# create_vars_consts_obj_xmile()------------------------------------------------
-
-test_that("create_vars_consts_obj_xmile() returns the expected variables &
-constants", {
-  vars_consts <- xml2::read_xml(test_model) %>%
-    xml2::xml_find_all(".//d1:flow|.//d1:aux")
-
-  output <- create_vars_consts_obj_xmile(vars_consts, "isee")
-
-  expect_equal(output$variables,
-               list(list(name     = "net_growth",
-                         equation = "population*growth_rate")))
-
-  expect_equal(output$constants,
-               list(list(name = "growth_rate", value = 0.01)))
-})
-
-test_that("create_vars_consts_obj_xmile() returns an empty list there are no
-  vars and consts", {
-
-    auxs_xml <- xml2::read_xml('
-    <root>
-      <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
-        <variables>
-          <stock name="Population">
-            <eqn>100</eqn>
-          </stock>
-        </variables>
-      </doc1>
-    </root>') %>%
-      xml2::xml_find_all(".//d1:flow|.//d1:aux")
-
-    actual_obj   <- create_vars_consts_obj_xmile(auxs_xml, "isee")
-    expected_obj <- list(variables = list(), constants = list())
-    expect_equal(actual_obj, expected_obj)
-  })
-
-test_that("create_vars_consts_obj_xmile() ignores aux Time from Vensim", {
-
-  auxs_xml <- xml2::read_xml('
-    <root>
-      <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
-        <variables>
-			    <stock name="Population">
-				    <eqn>100</eqn>
-			    </stock>
-			    <aux name="effect">
-				    <eqn>Population</eqn>
-			    </aux>
-			    <aux name="Time">
-				    <eqn>INTEG(1, INITIAL_TIME )</eqn>
-			   </aux>
-		    </variables>
-      </doc1>
-    </root>') %>%
-    xml2::xml_find_all(".//d1:flow|.//d1:aux")
-
-  actual_obj   <- create_vars_consts_obj_xmile(auxs_xml, "Vensim")
-  expected_obj <- list(variables = list(
-    list(name = "effect", equation = "Population")
-  ), constants = list())
-  expect_equal(actual_obj, expected_obj)
-})
-
-
-test_that("create_vars_consts_obj_xmile() creates the var object for a variable
-          with a graphical function, and the XMILE was producted by VENSIM", {
-
-            test_var_xml <- xml2::read_xml('
-  <root>
-    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
-      <variables>
-        <stock name="Price">
-          <eqn>15</eqn>
-        </stock>
-        <aux name="demand_price_schedule">
-          <eqn>WITH LOOKUP (Price, ([(0,10)-(50,100)],(5,100),(10,73),(15,57),(20,45),
-            (25,35),(30,28),(35,22),(40,18),(45,14),(50,10) ))
-          </eqn>
-        </aux>
-      </variables>
-    </doc1>
-  </root>') %>%
-              xml2::xml_find_all(".//d1:flow|.//d1:aux")
-
-            actual_obj   <- create_vars_consts_obj_xmile(test_var_xml, "Vensim")
-
-            expected_obj <- list(
-              variables = list(
-                list(name = "demand_price_schedule",
-                     equation = "f_demand_price_schedule(Price)",
-                     graph_fun = list(
-                       name = "f_demand_price_schedule",
-                       fun  = approxfun(
-                         x = seq(5, 50, 5),
-                         y = c(100, 73, 57, 45, 35, 28, 22, 18, 14, 10),
-                         method = "linear",
-                         yleft  = 100,
-                         yright = 10)))
-              ),
-              constants = list())
-
-            expect_equal(actual_obj, expected_obj)
-          })
-
-test_that("create_vars_consts_obj_xmile() creates the var object for a variable
-with a graphical function, and the XMILE was producted by STELLA", {
-
-  test_var_xml <- xml2::read_xml('
-  <root>
-    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
-      <variables>
-			  <stock name="Price">
-				  <eqn>15</eqn>
-				</stock>
-			  <aux name="demand price schedule">
-				  <eqn>Price</eqn>
-				  <gf>
-					  <xscale min="5" max="50"/>
-					  <yscale min="0" max="2"/>
-					  <ypts>100,73,57,45,35,28,22,18,14,10</ypts>
-				  </gf>
-			  </aux>
-      </variables>
-    </doc1>
-  </root>') %>%
-    xml2::xml_find_all(".//d1:flow|.//d1:aux")
-
-
-  actual_obj   <- create_vars_consts_obj_xmile(test_var_xml, "isee")
-
-  expected_obj <- list(
-    variables = list(
-      list(name = "demand_price_schedule",
-           equation = "f_demand_price_schedule(Price)",
-           graph_fun = list(
-             name = "f_demand_price_schedule",
-             fun  = approxfun(
-               x = seq(5, 50, 5),
-               y = c(100, 73, 57, 45, 35, 28, 22, 18, 14, 10),
-               method = "linear",
-               yleft  = 100,
-               yright = 10)))
-    ),
-    constants = list())
-
-  expect_equal(actual_obj, expected_obj)
-})
-
-test_that("create_vars_consts_obj_xmile() sanitises constant expressions", {
-  test_var_xml <- xml2::read_xml('
-  <root>
-    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
-      <variables>
-        <stock name="population">
-				  <eqn>100</eqn>
-				  <inflow>net_growth</inflow>
-			  </stock>
-			  <flow name="net growth">
-				  <eqn>population * growth_rate</eqn>
-			  </flow>
-			  <aux name="growth rate">
-				  <eqn>1 / 10</eqn>
-			  </aux>
-      </variables>
-    </doc1>
-  </root>') %>%
-    xml2::xml_find_all(".//d1:flow|.//d1:aux")
-
-  actual_obj   <- create_vars_consts_obj_xmile(test_var_xml, "Vensim")
-
-  expected_obj <- list(
-    variables = list(
-      list(name     = "net_growth",
-           equation = "population*growth_rate")),
-    constants = list(
-      list(name  = "growth_rate",
-           value = 0.1)
-    )
-  )
-  expect_equal(actual_obj, expected_obj)
-})
-
-test_that("create_vars_consts_obj_xmile() works with PULSE from Vensim", {
-  test_var_xml <- xml2::read_xml('
-  <root>
-    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
-    <variables>
-      <aux name="growth_rate">
-				<eqn>0.01 * PULSE(1, 0)					</eqn>
-			</aux>
-		</variables>
-    </doc1>
-  </root>') %>%
-    xml2::xml_find_all(".//d1:flow|.//d1:aux")
-
-  actual_obj   <- create_vars_consts_obj_xmile(test_var_xml, "Vensim")
-
-  expected_obj <- list(
-    variables = list(
-      list(name     = "growth_rate",
-           equation = "0.01*ifelse(time==1,1,0)")),
-    constants = list()
-  )
-  expect_equal(actual_obj, expected_obj)
-})
 
 # create_level_obj_xmile()======================================================
 
@@ -450,4 +261,139 @@ test_that("create_level_obj_xmile() throws an error when there are no stocks", {
          value = "30"))
 
   expect_error(create_level_obj_xmile(test_stocks_xml, test_vars, test_consts))
+})
+
+test_that("create_level_obj_xmile() takes into account builtin stocks", {
+
+  test_stocks_xml <- xml2::xml_find_all(smooth1_xml, ".//d1:stock")
+
+
+  variables <- list(
+      list(name     = "adjust_S1",
+           equation = "(0.5-S1)/5"))
+
+  constants <- list()
+
+  builtin_stocks <- list(
+    list(name      = "S1",
+         equation  = "adjust_S1",
+         initValue = 1)
+    )
+
+
+  actual_val      <- create_level_obj_xmile(test_stocks_xml, variables,
+                                            constants, builtin_stocks)
+  expected_val <- list(name      = "S1",
+                       equation  = "adjust_S1",
+                       initValue = 1)
+
+  expect_equal(actual_val[[1]], expected_val)
+})
+
+test_xml <- xml2::read_xml('
+  <root>
+    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
+		  <variables>
+			<stock name="Population">
+				<dimensions>
+					<dim name="region"/>
+				</dimensions>
+				<element subscript="A">
+					<eqn>100</eqn>
+				</element>
+				<element subscript="B">
+					<eqn>200</eqn>
+				</element>
+				<inflow>growth</inflow>
+			</stock>
+      </variables>
+    </doc1>
+  </root>')
+
+test_stocks_xml <- xml2::xml_find_all(test_xml, ".//d1:stock")
+
+test_that("create_level_obj_xmile() handles stock vectors", {
+
+  test_vars   <- list()
+  test_consts <- list()
+
+  expected_obj <- list(
+    list(
+      name      = "Population_A",
+      equation  = "growth_A",
+      initValue = 100),
+    list(
+      name      = "Population_B",
+      equation  = "growth_B",
+      initValue = 200))
+
+  actual_obj <- create_level_obj_xmile(test_stocks_xml, test_vars, test_consts)
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+test_that("extract_stock_info() handles a stock vector", {
+  expected_obj <- list(
+    list(name = "Population_A", equation = "growth_A", initValue = "100"),
+    list(name = "Population_B", equation = "growth_B", initValue = "200"))
+
+  actual_obj <- extract_stock_info(test_stocks_xml[[1]], dims_obj = NULL)
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+test_that("extract_stock_info() handles vector stock with a unique initialisation", {
+  test_xml <- xml2::read_xml('
+  <root>
+    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
+		  <variables>
+			  <stock name="E">
+				  <dimensions>
+					  <dim name="Age"/>
+				  </dimensions>
+				  <eqn>0</eqn>
+				  <inflow>IR</inflow>
+				  <outflow>DR</outflow>
+			  </stock>
+      </variables>
+    </doc1>
+  </root>')
+
+  test_stocks_xml <- xml2::xml_find_all(test_xml, ".//d1:stock")
+
+  expected_obj <- list(
+    list(name = "E_1", equation = "IR_1-DR_1", initValue = "0"),
+    list(name = "E_2", equation = "IR_2-DR_2", initValue = "0"),
+    list(name = "E_3", equation = "IR_3-DR_3", initValue = "0"),
+    list(name = "E_4", equation = "IR_4-DR_4", initValue = "0"))
+
+  dims_obj <- list(Age = c(1:4))
+
+  actual_obj <- extract_stock_info(test_stocks_xml[[1]], dims_obj)
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+# create_dims_obj()-------------------------------------------------------------
+
+test_that("create_dims_obj() returns the expected object", {
+
+  test_xml <- xml2::read_xml('
+  <root>
+    <doc1 xmlns = "http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
+	<dimensions>
+		<dim name="Age" size="4"/>
+		<dim name="Interactions">
+			<elem name="b11"/>
+			<elem name="b12"/>
+    </dim>
+	</dimensions>
+    </doc1>
+  </root>')
+
+  actual_obj <- create_dims_obj(test_xml)
+  expected_obj <- list(Age = c(1:4),
+                       Interactions = c("b11", "b12"))
+
+  expect_equal(actual_obj, expected_obj)
 })
