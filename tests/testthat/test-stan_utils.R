@@ -1,90 +1,78 @@
-test_that("stan_transformed_data() returns the expected string", {
-  expected_string <- paste(
-    "transformed data {",
-    "  real x_r[0];",
-    "  int  x_i[0];",
-    "}", sep = "\n")
-  expect_equal(stan_transformed_data(), expected_string)
+
+test_that("get_dist_obj() declares the vector for init values", {
+
+  rhs <- "neg_binomial_2(net_flow(C), phi)"
+
+  actual <- get_dist_obj(rhs)
+
+  expected <- list(dist_name = "neg_binomial_2",
+                   mu        = "net_flow(C)",
+                   phi       = "phi")
+
+  expect_equal(actual, expected)
 })
 
-test_that("extract_timeseries_var() returns the expected data frame", {
-  test_df <- data.frame(`var[1]` = rep(0, 2),
-                        `var[2]` = rep(1, 2),
-                        check.names = FALSE)
+test_that("get_meas_params() deals with a given concentration parameter", {
 
-  expected_df <- data.frame(iter     = rep(1:2, 2),
-                            time     = rep(1:2, each = 2),
-                            variable = "var",
-                            value    = c(0, 0, 1, 1))
+  meas_mdl         <- list("y ~ neg_binomial_2(net_flow(C), 10)")
+  estimated_params <- list(sd_prior("par_beta", "lognormal", c(0, 1)))
 
-  expect_equal(extract_timeseries_var("var", test_df), expected_df)
+  actual   <- get_meas_params(meas_mdl, estimated_params)
+  expected <- estimated_params
 
+  expect_equal(actual, expected)
 })
 
-test_that("extract_timeseries_stock() returns the expected data frame", {
-  test_df <- data.frame(`yhat[1,2]` = rep(0, 2),
-                        `yhat[2,2]` = rep(1, 2),
-                        check.names = FALSE)
+test_that("get_meas_params() handles priors for measurement parameters", {
 
-  expected_df <- data.frame(iter     = rep(1:2, 2),
-                            time     = rep(1:2, each = 2),
-                            stock    = "S2",
-                            value    = c(0, 0, 1, 1))
+  meas_mdl <- list("y1 ~ lognormal(log(Lynx), sigma_1)")
 
-  test_stocks <- c("S1", "S2")
+  estimated_params <- list(sd_prior("par_alpha", "normal", c(1, 0.5),
+                                    min_0 = TRUE),
+                           sd_prior("sigma_1", "lognormal", c(-1, 1)))
 
-  expect_equal(extract_timeseries_stock("S2", test_df, test_stocks, "yhat"),
-               expected_df)
+  actual   <- get_meas_params(meas_mdl, estimated_params)
+
+  expected <- list(sd_prior("par_alpha", "normal", c(1, 0.5),
+                            min_0 = TRUE),
+                   list(par_name = "sigma_1",
+                        dist     = "lognormal",
+                        mu       = -1,
+                        sigma    = 1,
+                        min      = 0,
+                        type     = "meas_par"))
+
+  expect_equal(actual, expected)
 })
 
-test_that("stan_data() returns the expected string", {
+test_that("translate_stock_text() returns the expected object", {
 
-  expected_string <- paste(
-    "data {",
-    "  int<lower = 1> n_obs;",
-    "  int<lower = 1> n_params;",
-    "  int<lower = 1> n_difeq;",
-    "  int y[n_obs];",
-    "  real t0;",
-    "  real ts[n_obs];",
-    "  vector[n_difeq] y0;",
-    "}", sep = "\n")
+  lvl_names     <- c("Hares", "Lynx")
+  delta_counter <- 1
+  stock_txt     <- "log(Hares[0])"
 
-  expect_equal(stan_data("y", "int"), expected_string)
+  actual <- translate_stock_text(stock_txt, delta_counter, lvl_names)
+
+  expected <- list(stock_txt     = "log(x0[1])",
+                   delta_counter = 1)
+
+  expect_equal(actual, expected)
 })
 
-test_that("stan_data() allows the user to remove y0", {
+#---------tidy_meas_params()------------------------------------------------
 
-  expected_string <- paste(
-    "data {",
-    "  int<lower = 1> n_obs;",
-    "  int<lower = 1> n_params;",
-    "  int<lower = 1> n_difeq;",
-    "  int y[n_obs];",
-    "  real t0;",
-    "  real ts[n_obs];",
-    "}", sep = "\n")
+test_that("tidy_meas_params() returns the expected list", {
 
-  expect_equal(stan_data("y", "int", inits = FALSE), expected_string)
+  meas_obj <- "y ~ neg_binomial_2(net_flow(C), phi)"
+  actual   <- tidy_meas_params(meas_obj, list())
+
+  expected <- list(
+    list(par_name  = "inv_phi",
+         dist      = "exponential",
+         beta      = 5,
+         min       = 0,
+         type      = "meas_par",
+         par_trans = "inv"))
+
+  expect_equal(actual, expected)
 })
-
-test_that("stan_data() allows the user to specify the var type", {
-
-  expected_string <- paste(
-    "data {",
-    "  int<lower = 1> n_obs;",
-    "  int<lower = 1> n_params;",
-    "  int<lower = 1> n_difeq;",
-    "  real y[n_obs];",
-    "  real t0;",
-    "  real ts[n_obs];",
-    "}", sep = "\n")
-
-  expect_equal(stan_data("y", "real", inits = FALSE), expected_string)
-})
-
-test_that("stan_data() returns an error when different sizes", {
-  expect_error(stan_data(c("y1", "y2"), "real", inits = FALSE),
-               "Different length sizes between 'vars_vector' & 'type' pars")
-})
-

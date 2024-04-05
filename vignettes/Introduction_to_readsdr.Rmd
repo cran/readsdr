@@ -17,10 +17,9 @@ knitr::opts_chunk$set(
 Model: SIR
 ----------
 
-The SIR model is an epidemiological model, due to [Kermack and McKendrick](https://royalsocietypublishing.org/doi/pdf/10.1098/rspa.1927.0118), 
-that computes the theoretical number of people infected with a contagious 
-illness in a closed population over time. The SIR models the flows of people 
-between three states:
+The SIR model is an epidemiological model that computes the theoretical number 
+of people infected with a contagious illness in a closed population over time. 
+The SIR models the flows of people between three states:
 
 Susceptible (S) 
   : number of individuals who are not infected but could become infected.
@@ -93,7 +92,7 @@ On the other side, we can implement the model in flexible and powerful
 statistical environments such as R that offer innumerable tools for numerical 
 analysis and data visualisation. Specifically, models can be implemented with 
 the [deSolve](https://www.jstatsoft.org/article/view/v033i09) library (see 
-[Duggan](https://www.springer.com/gp/book/9783319340418) for more details).
+[Duggan](https://link.springer.com/book/10.1007/978-3-319-34043-2) for more details).
 This alternative requires the user to type all model equations in computational
 order. For large models, this task can be cumbersome and may lead to incorrect
 implementations.
@@ -107,7 +106,7 @@ is achieved by the function **read_xmile**.
 library(readsdr)
 
 filepath <- system.file("models/", "SIR.stmx", package = "readsdr")
-mdl      <- read_xmile(filepath) 
+mdl      <- read_xmile(filepath, graph = TRUE) 
 ```
 
 _read_xmile_ returns a list of three elements. The element _description_ 

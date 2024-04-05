@@ -6,6 +6,7 @@
 #'   considered as parameters in the ODE function
 #' @param extra_funs A vector of strings. Each string corresponds to a
 #' user-defined function.
+#' @param XMILE_structure A list.
 #' @inheritParams read_xmile
 #'
 #' @return A string with the code containing a function with the model's
@@ -17,13 +18,16 @@
 #' stan_ode_function(path, "my_model")
 stan_ode_function <- function(filepath, func_name, pars = NULL,
                               const_list = NULL,
-                              extra_funs = NULL) {
+                              extra_funs = NULL, XMILE_structure) {
 
-  XMILE_structure  <- extract_structure_from_XMILE(filepath)
+  if (!missing(XMILE_structure)) {
 
-  if(!is.null(const_list)) {
-    XMILE_structure <- override_consts(XMILE_structure, const_list)
+    if (!missing(filepath)) {
+      msg <- "'filepath' and 'XMILE_structure' both specified"
+      stop(msg)
+    }
   }
+  else XMILE_structure  <- extract_structure_from_XMILE(filepath)
 
   levels           <- XMILE_structure$levels
   variables        <- XMILE_structure$variables
@@ -60,7 +64,7 @@ stan_ode_function <- function(filepath, func_name, pars = NULL,
 }
 
 get_fun_declaration <- function(func_name) {
-  paste0("  vector ", func_name, "(real time, vector y, real[] params) {")
+  paste0("  vector ", func_name, "(real time, vector y, array[] real params) {")
 }
 
 get_diffeq_declaration <- function(n_stocks) {

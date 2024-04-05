@@ -1,4 +1,71 @@
-context("XMILE helpers")
+# extract_structure_from_XMILE()------------------------------------------------
+
+test_that("extract_structure_from_XMILE() returns the expected list for an
+unknown init for sd_bayes", {
+
+  filepath <- system.file("models/", "SEIR.stmx", package = "readsdr")
+
+  actual <- extract_structure_from_XMILE(filepath, "I0")[["levels"]]
+
+  expected <- list(list(name      = "S",
+                        equation  = "-S_to_E",
+                        initValue = "(10000) - I0"),
+                   list(name      = "E",
+                        equation  = "S_to_E-E_to_I",
+                        initValue = 0),
+                   list(name      = "I",
+                        equation  = "E_to_I-I_to_R",
+                        initValue = "I0"),
+                   list(name      = "R",
+                        equation  = "I_to_R",
+                        initValue = 0),
+                   list(name      = "C",
+                        equation  = "C_in",
+                        initValue = "I0"))
+
+  expect_equal(actual, expected)
+})
+
+test_that("extract_structure_from_XMILE() returns the expected stock list", {
+
+  filepath <- system.file("models/", "SEjIkR.stmx", package = "readsdr")
+
+  params <- c("par_beta", "par_rho", "I0")
+
+  const_list <- list(j = 1, k = 2)
+
+  mdl_structure <- extract_structure_from_XMILE(filepath, params,
+                                                const_list = const_list)
+
+  actual <- mdl_structure$levels
+
+  expected <- list(list(name     = "dly_E_to_I_1",
+                        equation = "E_to_I - dly_E_to_I_1_out",
+                        initValue = "((0.5)*I0 * 1/(0.5)) / (2)"),
+                   list(name     = "dly_E_to_I_2",
+                        equation = "dly_E_to_I_1_out - dly_E_to_I_2_out",
+                        initValue = "((0.5)*I0 * 1/(0.5)) / (2)"),
+                   list(name     = "dly_S_to_E_1",
+                        equation = "S_to_E - dly_S_to_E_1_out",
+                        initValue = 0),
+                   list(name     = "S",
+                        equation = "-S_to_E",
+                        initValue = "(10000) - I0"),
+                   list(name     = "E",
+                        equation = "S_to_E-E_to_I",
+                        initValue = 0),
+                   list(name     = "I",
+                        equation = "E_to_I-I_to_R",
+                        initValue = "I0"),
+                   list(name     = "R",
+                        equation = "I_to_R",
+                        initValue = 0),
+                   list(name     = "C",
+                        equation = "C_in",
+                        initValue = 0))
+
+  expect_equal(actual, expected)
+})
 
 # compute_init_value()----------------------------------------------------------
 test_that("compute_init_value() extracts the expected initial value when it is
@@ -6,7 +73,7 @@ the defined by a constant", {
   stock_name    <- "test_stock"
   equation      <- "c"
   auxs          <- list(list(name = "c", equation = "100"))
-  actual_val    <- compute_init_value(stock_name, equation, auxs)
+  actual_val    <- compute_init_value(stock_name, equation, auxs, NULL)
   expected_val  <- 100
   expect_equal(actual_val, expected_val)
 })
@@ -19,7 +86,7 @@ the defined by a one-level nested equation", {
     list(name = "c", equation = "c1 + c2"),
     list(name = "c1", equation = "80"),
     list(name = "c2", equation = "20"))
-  actual_val    <- compute_init_value(stock_name, equation, auxs)
+  actual_val    <- compute_init_value(stock_name, equation, auxs, NULL)
   expected_val  <- 100
   expect_equal(actual_val, expected_val)
 })
@@ -36,7 +103,7 @@ the defined by a two-level nested equation", {
     list(name = "c4", equation = "4"),
     list(name = "c5", equation = "40"),
     list(name = "c6", equation = "2"))
-  actual_val    <- compute_init_value(stock_name, equation, auxs)
+  actual_val    <- compute_init_value(stock_name, equation, auxs, NULL)
   expected_val  <- 100
   expect_equal(actual_val, expected_val)
 })
@@ -47,7 +114,7 @@ the defined by a constant and variable", {
   equation      <- "3 + c"
   auxs          <- list(
     list(name = "c", equation = "97"))
-  actual_val    <- compute_init_value(stock_name, equation, auxs)
+  actual_val    <- compute_init_value(stock_name, equation, auxs, NULL)
   expected_val  <- 100
   expect_equal(actual_val, expected_val)
 })
@@ -60,7 +127,7 @@ the defined by a constant and a one-level nested variable", {
     list(name = "c", equation = "c1 - c2"),
     list(name = "c1", equation = "27"),
     list(name = "c2", equation = "7"))
-  actual_val    <- compute_init_value(stock_name, equation, auxs)
+  actual_val    <- compute_init_value(stock_name, equation, auxs, NULL)
   expected_val  <- 100
   expect_equal(actual_val, expected_val)
 })
@@ -73,7 +140,7 @@ all variables are defined by constants", {
     list(name = "ey", equation = "20000"),
     list(name = "ep", equation = "1"),
     list(name = "eyvm", equation = "5"))
-  actual_val    <- compute_init_value(stock_name, test_equation, test_auxs)
+  actual_val    <- compute_init_value(stock_name, test_equation, test_auxs, NULL)
   expected_val  <- 4000
   expect_equal(actual_val, expected_val)
 })
@@ -97,7 +164,7 @@ graph function along the process", {
              yright = 100)
          )),
     list(name = "init_value", equation = "100"))
-  actual_val    <- compute_init_value(stock_name, test_equation, test_auxs)
+  actual_val    <- compute_init_value(stock_name, test_equation, test_auxs, NULL)
   expected_val  <- 100
   expect_equal(actual_val, expected_val)
 })
@@ -107,6 +174,57 @@ process failed", {
   auxs <- list()
   expect_error(compute_init_value("test_stock", "1000-seed_value", auxs),
                "Can't compute the init value of 'test_stock'")
+})
+
+test_that("compute_init_value() handles sd_fixed_delay",{
+
+  stock_name         <- "smooth_ordered"
+  test_equation      <- "ordered"
+  test_auxs          <- list(
+    list(name = "ordered", equation = "sd_fixed_delay('placed',time,1,4,.memory)"),
+    list(name = "time", equation = "0"),
+    list(name = "placed", equation = "a+b"))
+
+  actual_val    <- compute_init_value(stock_name, test_equation, test_auxs, NULL)
+
+  expected_val <- 4
+  expect_equal(actual_val, expected_val)
+})
+
+test_that("compute_init_value() returns the expected value with a fixed init", {
+
+  stock_name    <- "S"
+  equation      <- "n - I0"
+
+  auxs          <- list(list(name     = "n",
+                             equation = 10000),
+                        list(name     = "I0",
+                             equation = 1))
+
+  fixed_inits   <- "I0"
+  actual_val    <- compute_init_value(stock_name, equation, auxs, fixed_inits)
+
+  expected_val  <- "(10000) - I0"
+
+  expect_equal(actual_val, expected_val)
+
+  stock_name <- "St"
+  equation   <- "gamma_param *(K - Iu0)"
+
+  auxs       <- list(list(name     = "Iu0",
+                          equation = 100),
+                     list(name     = "K",
+                          equation = 5e+06),
+                     list(name     = "gamma_param",
+                          equation = 0.28))
+
+  fixed_inits   <-  c("Iu0", "inv_phi")
+
+  actual_val    <- compute_init_value(stock_name, equation, auxs, fixed_inits)
+  expected_val  <- "(0.28) *((5e+06) - Iu0)"
+
+  expect_equal(actual_val, expected_val)
+
 })
 
 # sanitise_elem_name()----------------------------------------------------------
@@ -123,12 +241,13 @@ test_that("sanitise_elem_name() deals with spaces", {
 # sanitise_init_value()---------------------------------------------------------
 
 test_that("sanitise_init_value() removes commentaries", {
-  actual_val <- sanitise_init_value("\n\t\t\t\t\t5800\n{(nic*ey)}\n\t\t\t\t\t")
+  actual_val <- sanitise_init_value("\n\t\t\t\t\t5800\n{(nic*ey)}\n\t\t\t\t\t",
+                                    "Vensim", FALSE)
   expect_equal(actual_val, "5800")
 })
 
 test_that("sanitise_init_value() removes commentaries", {
-  actual_val <- sanitise_init_value("total_population - 1")
+  actual_val <- sanitise_init_value("total_population - 1", "Vensim", FALSE)
   expect_equal(actual_val, "total_population - 1")
 })
 
@@ -246,7 +365,7 @@ test_that("eval_constant_expr() is not affected by elements in the global enviro
   expect_equal(actual_val, expected_val)
 })
 
-#===============================================================================
+# check_elem_name()=============================================================
 test_that("check_elem_name() throws an error in the presence of invalid names", {
   test_name <- "a+"
   expect_error(check_elem_name(test_name))

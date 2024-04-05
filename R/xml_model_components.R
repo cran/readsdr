@@ -1,4 +1,5 @@
 create_dims_obj <- function(raw_xml) {
+
   dim_xml       <- xml2::xml_find_first(raw_xml, ".//d1:dimensions")
   dim_elems_xml <- xml2::xml_find_all(dim_xml, ".//d1:dim")
 
@@ -9,7 +10,33 @@ create_dims_obj <- function(raw_xml) {
   dims_list        <- lapply(dim_elems_xml, extract_dim_elems)
   names(dims_list) <- dim_names
 
-  dims_list
+  variables_xml   <- xml2::xml_find_first(raw_xml, ".//d1:variables")
+
+  model_elems <- xml2::xml_find_all(variables_xml,
+                                   ".//d1:flow|.//d1:aux|.//d1:stock")
+
+  dictionary <- lapply(model_elems, function(elem_obj) {
+
+    elem_name <- xml2::xml_attr(elem_obj, "name") %>% sanitise_elem_name()
+
+    dim_xml   <- xml2::xml_find_all(elem_obj, ".//d1:dimensions")
+    dim_tags  <- xml2::xml_find_all(dim_xml, ".//d1:dim")
+    n_dims    <- length(dim_tags)
+
+    if(n_dims == 0) return(NULL)
+
+    dim_names <- sapply(dim_tags, function(elem_tag) {
+      xml2::xml_attr(elem_tag, "name")
+    })
+
+    dict_obj        <- list(dim_names)
+    names(dict_obj) <- elem_name
+    dict_obj
+  }) %>% remove_NULL() %>% unlist(recursive = FALSE)
+
+
+  list(global_dims = dims_list,
+       dictionary  = dictionary)
 }
 
 extract_dim_elems <- function(dim_tag) {
@@ -28,6 +55,7 @@ extract_dim_elems <- function(dim_tag) {
 
 
 create_param_obj_xmile <- function(sim_specs) {
+
   start      <- sim_specs %>% xml2::xml_find_first("//d1:start") %>%
     xml2::xml_double()
   stop       <- sim_specs %>% xml2::xml_find_first("//d1:stop") %>%
@@ -36,7 +64,7 @@ create_param_obj_xmile <- function(sim_specs) {
   dt         <- xml2::xml_double(dt_html)
 
   if(xml2::xml_has_attr(dt_html ,"reciprocal")) {
-    if(xml2::xml_attr(dt_html ,"reciprocal") == "true"){
+    if(xml2::xml_attr(dt_html, "reciprocal") == "true"){
       dt <- 1 / dt
     }
   }
@@ -47,18 +75,21 @@ create_param_obj_xmile <- function(sim_specs) {
 }
 
 create_level_obj_xmile <- function(stocks_xml, variables, constants,
-                                   builtin_stocks = NULL, dims_obj = NULL) {
+                                   builtin_stocks = NULL, dims_obj,
+                                   time_aux, vendor, fixed_inits = NULL) {
 
   if(length(stocks_xml) == 0L & is.null(builtin_stocks)) {
-    stop("A model must contain stocks", call. = FALSE)
+    stop("SD models must contain stocks", call. = FALSE)
   }
 
-  # This makes consts & auxs have the same properties
+  # This function makes consts & auxs to have the same properties
   constants <- lapply(constants, function(const) {
     list(name = const$name, equation = const$value)
   })
 
-  stocks_list <- lapply(stocks_xml, extract_stock_info, dims_obj = dims_obj)
+  stocks_list <- lapply(stocks_xml, extract_stock_info, dims_obj = dims_obj,
+                        vendor = vendor)
+  stocks_list <- remove_NULL(stocks_list)
   stocks_list <- unlist(stocks_list, recursive = FALSE)
 
   if(!is.null(builtin_stocks)) {
@@ -69,31 +100,19 @@ create_level_obj_xmile <- function(stocks_xml, variables, constants,
     list(name = stock$name, equation = stock$initValue)
   })
 
-  auxs        <- c(variables, constants, stock_auxs)
-
-  n_stocks    <- length(stocks_list)
-
-  for(i in seq_len(n_stocks)){
-    initValue  <- stocks_list[[i]]$initValue
-    stock_name <- stocks_list[[i]]$name
-
-    is_numeric <- suppressWarnings(!is.na(as.numeric(initValue)))
-
-    if(is_numeric) {
-      stocks_list[[i]]$initValue <- as.numeric(initValue)
-    }
-
-    if(!is_numeric) {
-      newInitValue               <- compute_init_value(stock_name, initValue,
-                                                       auxs)
-      stocks_list[[i]]$initValue <- as.numeric(newInitValue)
-    }
-  }
+  auxs        <- c(variables, constants, stock_auxs, list(time_aux))
+  stocks_list <- lapply(stocks_list, get_init_value, auxs, fixed_inits)
 
   stocks_list
 }
 
-extract_stock_info <- function(stock_xml, dims_obj) {
+extract_stock_info <- function(stock_xml, dims_obj, vendor) {
+
+  # Only God knows why Ventana would treat the FIXED DELAY as a stock
+  eq <- xml2::xml_find_all(stock_xml, ".//d1:eqn")
+  eq <- xml2::xml_text(eq)
+  if(any(grepl("DELAY_FIXED|DELAY_N", eq))) return (NULL)
+  #-----------------------------------------------------------------------------
 
   dim_xml     <- xml2::xml_find_all(stock_xml, ".//d1:dimensions")
   dimensions  <- xml2::xml_find_all(stock_xml, ".//d1:dim")
@@ -102,17 +121,18 @@ extract_stock_info <- function(stock_xml, dims_obj) {
   is_arrayed <- ifelse(n_dims > 0, TRUE, FALSE)
 
   if(is_arrayed) {
-    dim_name     <- xml2::xml_attr(dimensions[[1]], "name")
 
-    cld_xml      <- xml2::xml_children(stock_xml)
-    child_names  <- xml2::xml_name(cld_xml)
+    global_dims <- dims_obj$global_dims
 
-    if("eqn" %in% child_names) subs <- dims_obj[[dim_name]]
+    dim_tags  <- xml2::xml_find_all(dim_xml, ".//d1:dim")
 
-    if(!("eqn" %in% child_names)) {
-      elements_xml <- xml2::xml_find_all(stock_xml, ".//d1:element")
-      subs         <- xml2::xml_attr(elements_xml, "subscript")
-    }
+    dim_names <- sapply(dim_tags, function(elem_tag) {
+      xml2::xml_attr(elem_tag, "name")
+    })
+
+    dims_list        <- lapply(dim_names, function(dim_name) global_dims[[dim_name]])
+    names(dims_list) <- dim_names
+    elems            <- combine_dims(dims_list)
   }
 
   inflow_vctr <- stock_xml %>% xml2::xml_find_all(".//d1:inflow") %>%
@@ -125,7 +145,7 @@ extract_stock_info <- function(stock_xml, dims_obj) {
     inflow_list <- list(inflow_vctr)
 
     if(is_arrayed) {
-      inflow_list <- lapply(subs, function(s) paste(inflow_vctr, s, sep = "_"))
+      inflow_list <- lapply(elems, function(s) paste(inflow_vctr, s, sep = "_"))
     }
 
     text_inflow  <- sapply(inflow_list, function(inflows) paste(inflows,
@@ -142,7 +162,7 @@ extract_stock_info <- function(stock_xml, dims_obj) {
     outflow_list <- list(outflow_vctr)
 
     if(is_arrayed) {
-      outflow_list <- lapply(subs, function(s) paste(outflow_vctr, s, sep = "_"))
+      outflow_list <- lapply(elems, function(s) paste(outflow_vctr, s, sep = "_"))
     }
 
     text_outflow  <- sapply(outflow_list, function(outflows) {
@@ -171,16 +191,84 @@ extract_stock_info <- function(stock_xml, dims_obj) {
     sanitise_elem_name() %>% check_elem_name()
 
   if(is_arrayed) {
-    stock_names <- paste(stock_names, subs, sep = "_")
+    stock_names <- paste(stock_names, elems, sep = "_")
+  }
+
+  #-----------------------------------------------------------------------------
+
+  cld_xml      <- xml2::xml_children(stock_xml)
+  child_names  <- xml2::xml_name(cld_xml)
+
+
+
+  approach <- ifelse(is_arrayed & "eqn" %in% child_names,
+                     "approach_1", "approach_2")
+
+  # Apply all from Stella
+  if(approach == "approach_1") {
+
+    eqn <- stock_xml %>% xml2::xml_find_all(".//d1:eqn") %>%
+      xml2::xml_text() %>% sanitise_init_value(vendor, is_arrayed)
+
+    aux_obj <- list(name     = stock_names,
+                    equation = eqn)
+
+    array_obj  <- array_equations(aux_obj, dims_obj, dim_names, vendor)
+    initValues <- array_obj$equations
   }
 
 
-  initValues <- stock_xml %>% xml2::xml_find_all(".//d1:eqn") %>%
-    xml2::xml_text() %>% sanitise_init_value()
+  if(approach == "approach_2") {
+
+    initValues <- stock_xml %>% xml2::xml_find_all(".//d1:eqn") %>%
+     xml2::xml_text() %>% sanitise_init_value(vendor, is_arrayed)
+  }
+
+
+
+
+  n_init <- length(initValues)
+
+  if(is_arrayed & n_init == 1L) {
+
+    is_const <- !is.na(suppressWarnings(as.numeric(initValues)))
+
+    if(!is_const) {
+
+      if(vendor == "Vensim"){
+        initValues <- devectorise_equation(initValues, dims_list)
+      }
+    }
+  }
+
+
+  #-----------------------------------------------------------------------------
 
   summary_stocks <- data.frame(name      = stock_names,
                                equation  = netflows,
                                initValue = initValues)
 
   unname(as_row_list(summary_stocks))
+}
+
+get_init_value <- function(stock_obj, auxs, fixed_inits) {
+
+  initValue  <- stock_obj$initValue
+  stock_name <- stock_obj$name
+
+  is_numeric <- suppressWarnings(!is.na(as.numeric(initValue)))
+
+  if(is_numeric) stock_obj$initValue <- as.numeric(initValue)
+
+  if(!is_numeric) {
+
+    newInitValue <- compute_init_value(stock_name, initValue, auxs, fixed_inits)
+
+    if(is.null(fixed_inits)) newInitValue <- as.numeric(newInitValue)
+
+    stock_obj$initValue <- newInitValue
+  }
+
+  stock_obj
+
 }

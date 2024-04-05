@@ -20,11 +20,14 @@
 #' @noRd
 
 extract_variables <- function(lhs, rhs) {
+
+  rhs <- stringr::str_replace(rhs, "\\.memory", "")
+
   raw_elements <- stringr::str_split(rhs, "\\b")[[1]] %>%
     stringi::stri_remove_empty()
 
   # Elements that start with alphabetical characters
-  elems_alpha <- raw_elements[stringr::str_detect(raw_elements, "[:alpha:]+")]
+  elems_alpha <- raw_elements[stringr::str_detect(raw_elements, "^[A-Za-z].*")]
 
   # Filtering out functions min & max
   detected_vars <- stringr::str_remove_all(elems_alpha, "\\bmin\\b|\\bmax\\b")
@@ -36,6 +39,13 @@ extract_variables <- function(lhs, rhs) {
 
   # Filtering out ifelse
   detected_vars <- detected_vars[detected_vars != "ifelse"]
+
+  # Filtering out fixed delay
+  detected_vars <- detected_vars[detected_vars != "sd_fixed_delay"]
+
+  # Filtering out words reserved for RNG
+  detected_vars <- detected_vars[!detected_vars %in% c("rnorm", "rtruncnorm",
+                                                    "truncnorm")]
 
   unique(detected_vars)
 }

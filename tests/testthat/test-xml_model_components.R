@@ -1,4 +1,3 @@
-context("XML model components")
 
 test_model <-
   '<root>
@@ -82,8 +81,12 @@ test_that("create_level_obj_xmile() returns the expected object", {
     list(name = "initPopulation",
          value = "100"))
 
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
   level_obj    <- create_level_obj_xmile(test_stocks_xml,
-                                         test_vars, test_consts)
+                                         test_vars, test_consts,
+                                         time_aux = time_aux)
   actual_val   <- level_obj[[1]]
   expected_val <- list(name = "Population",
                        equation = "netGrowth",
@@ -107,8 +110,12 @@ test_that("create_level_obj_xmile() deals with levels with no flows", {
   test_vars   <- list()
   test_consts <- list()
 
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
   level_obj    <- create_level_obj_xmile(test_stocks_xml,
-                                         test_vars, test_consts)
+                                         test_vars, test_consts,
+                                         time_aux = time_aux)
   actual_obj   <- level_obj[[1]]
 
   expected_obj <- list(name = "Population",
@@ -143,8 +150,12 @@ test_that("create_level_obj_xmile() works should levels depend on other levels i
   test_vars   <- list()
   test_consts <- list()
 
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
   actual_obj    <- create_level_obj_xmile(test_stocks_xml,
-                                         test_vars, test_consts)
+                                         test_vars, test_consts,
+                                         time_aux = time_aux)
   expected_obj <- list(
     list(name      = "pop1",
          equation  = "net_change_1",
@@ -186,8 +197,12 @@ test_that("create_level_obj_xmile() returns the expected object in the presence 
 
   test_consts <- list()
 
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
   level_obj    <- create_level_obj_xmile(test_stocks_xml,
-                                         test_vars, test_consts)
+                                         test_vars, test_consts,
+                                         time_aux = time_aux)
   actual_val   <- level_obj[[1]]
   expected_val <- list(name = "Population",
                        equation = "births-emigration-deaths",
@@ -222,8 +237,12 @@ test_that("create_level_obj_xmile() returns the expected object in the presence 
 
   test_consts <- list()
 
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
   level_obj    <- create_level_obj_xmile(test_stocks_xml,
-                                         test_vars, test_consts)
+                                         test_vars, test_consts,
+                                         time_aux = time_aux)
   actual_val   <- level_obj[[1]]
   expected_val <- list(name = "Population",
                        equation = "births+immigration-deaths",
@@ -280,9 +299,14 @@ test_that("create_level_obj_xmile() takes into account builtin stocks", {
          initValue = 1)
     )
 
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
 
   actual_val      <- create_level_obj_xmile(test_stocks_xml, variables,
-                                            constants, builtin_stocks)
+                                            constants, builtin_stocks,
+                                            time_aux = time_aux)
+
   expected_val <- list(name      = "S1",
                        equation  = "adjust_S1",
                        initValue = 1)
@@ -327,17 +351,105 @@ test_that("create_level_obj_xmile() handles stock vectors", {
       equation  = "growth_B",
       initValue = 200))
 
-  actual_obj <- create_level_obj_xmile(test_stocks_xml, test_vars, test_consts)
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
+  dims_obj <- list(global_dims = list(region = c("A", "B")))
+
+  actual_obj <- create_level_obj_xmile(test_stocks_xml, test_vars, test_consts,
+                                       time_aux = time_aux,
+                                       dims_obj = dims_obj,
+                                       vendor = "isee")
 
   expect_equal(actual_obj, expected_obj)
 })
+
+test_that("create_level_obj_xmile() handles DELAY FIXED from Vensim", {
+
+  test_xml <- xml2::read_xml('
+  <xmile version="1.0" xmlns="http://docs.oasis-open.org/xmile/ns/XMILE/v1.0">
+    <model>
+		  <variables>
+			  <stock name="out">
+				  <eqn>
+					out=
+	DELAY_FIXED(inflow, 2, 0)
+					</eqn>
+			  </stock>
+			  <stock name="test">
+			    <eqn>
+			    0
+					</eqn>
+					<inflow>
+					inflow
+					</inflow>
+					<outflow>
+					outflow
+					</outflow>
+			  </stock>
+      </variables>
+	  </model>
+  </xmile>')
+
+  test_stocks_xml <- xml2::xml_find_all(test_xml, ".//d1:stock")
+  test_vars   <- list()
+  test_consts <- list()
+
+  expected_obj <- list(
+    list(
+      name      = "test",
+      equation  = "inflow-outflow",
+      initValue = 0))
+
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
+  actual_obj <- create_level_obj_xmile(test_stocks_xml, test_vars, test_consts,
+                                       time_aux = time_aux, vendor = "Vensim")
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+test_that("create_level_obj_xmile() handles step function in init value", {
+  stocks_xml <- list()
+
+  variables <- list(
+    list(name     = "orders",
+         equation = "3+ifelse(time>=2,3,0)"),
+    list(name     = "adjust_smoothed_step",
+         equation = "(orders-smoothed_step)/2")
+  )
+
+  constants <- list()
+
+  builtin_stocks <- list(list(name      = "smoothed_step",
+                              equation  = "adjust_smoothed_step",
+                              initValue = "orders"))
+
+  time_aux   <- list(name     = "time",
+                     equation = 0)
+
+  actual_obj <- create_level_obj_xmile(stocks_xml, variables, constants,
+                                       builtin_stocks, time_aux = time_aux)
+
+  expected_obj <- list(list(name      = "smoothed_step",
+                            equation  = "adjust_smoothed_step",
+                            initValue = 3))
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+# extract_stock_info()----------------------------------------------------------
 
 test_that("extract_stock_info() handles a stock vector", {
   expected_obj <- list(
     list(name = "Population_A", equation = "growth_A", initValue = "100"),
     list(name = "Population_B", equation = "growth_B", initValue = "200"))
 
-  actual_obj <- extract_stock_info(test_stocks_xml[[1]], dims_obj = NULL)
+  dims_obj <- list(global_dims = list(region = c("A", "B")))
+
+  actual_obj <- extract_stock_info(test_stocks_xml[[1]],
+                                   dims_obj = dims_obj, vendor = "isee")
 
   expect_equal(actual_obj, expected_obj)
 })
@@ -367,9 +479,86 @@ test_that("extract_stock_info() handles vector stock with a unique initialisatio
     list(name = "E_3", equation = "IR_3-DR_3", initValue = "0"),
     list(name = "E_4", equation = "IR_4-DR_4", initValue = "0"))
 
-  dims_obj <- list(Age = c(1:4))
+  dims_obj <- list(global_dims = list(Age = c(1:4)))
 
-  actual_obj <- extract_stock_info(test_stocks_xml[[1]], dims_obj)
+  actual_obj <- extract_stock_info(test_stocks_xml[[1]], dims_obj, "isee")
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+test_that("extract_stock_info() handles a 2D stock from Vensim", {
+
+  filepath        <- "./2d_pop.xmile"
+
+  raw_xml       <- xml2::read_xml(filepath)
+  dims_obj      <- create_dims_obj(raw_xml)
+  variables_xml <- xml2::xml_find_first(raw_xml, ".//d1:variables")
+  stocks_xml    <-  xml2::xml_find_all(variables_xml, ".//d1:stock")
+  stock_xml     <- stocks_xml[[1]]
+  actual_obj    <- extract_stock_info(stocks_xml[[1]], dims_obj, "Vensim")
+
+  expected_obj <- list(
+    list(name       = "Population_Westeros_Young",
+         equation   = "Net_growth_Westeros_Young",
+         initValue = "init_pop_Westeros_Young"),
+    list(name       = "Population_Westeros_Old",
+         equation   = "Net_growth_Westeros_Old",
+         initValue = "init_pop_Westeros_Old"),
+    list(name       = "Population_Essos_Young",
+         equation   = "Net_growth_Essos_Young",
+         initValue = "init_pop_Essos_Young"),
+    list(name       = "Population_Essos_Old",
+         equation   = "Net_growth_Essos_Old",
+         initValue = "init_pop_Essos_Old"))
+
+  expect_equal(actual_obj, expected_obj)
+})
+
+test_that("extract_stock_info() handles vectorised init values", {
+
+  filepath      <- "./test_models/vec_pop.stmx"
+  raw_xml       <- xml2::read_xml(filepath)
+  dims_obj      <- create_dims_obj(raw_xml)
+  variables_xml <- xml2::xml_find_first(raw_xml, ".//d1:variables")
+  stocks_xml    <-  xml2::xml_find_all(variables_xml, ".//d1:stock")
+  stock_xml     <- stocks_xml[[1]]
+
+  actual_obj    <- extract_stock_info(stock_xml , dims_obj, "isee")
+
+  expected_obj <- list(
+    list(name      = "Population_1",
+         equation  = "net_growth_1",
+         initValue = "init_pop_1"),
+    list(name      = "Population_2",
+         equation  = "net_growth_2",
+         initValue = "init_pop_2 - 1")
+  )
+
+  expect_equal(actual_obj, expected_obj)
+
+
+  filepath      <- system.file("models/", "SEIR_age.stmx", package = "readsdr")
+  raw_xml       <- xml2::read_xml(filepath)
+  dims_obj      <- create_dims_obj(raw_xml)
+  variables_xml <- xml2::xml_find_first(raw_xml, ".//d1:variables")
+  stocks_xml    <-  xml2::xml_find_all(variables_xml, ".//d1:stock")
+  stock_xml     <- stocks_xml[[1]]
+
+  actual_obj    <- extract_stock_info(stock_xml, dims_obj, "isee")
+
+  expected_obj <- list(
+    list(name      = "S_A",
+         equation  = "-S_to_E_A",
+         initValue = "N_A-I_A"),
+    list(name      = "S_B",
+         equation  = "-S_to_E_B",
+         initValue = "N_B-I_B"),
+    list(name      = "S_C",
+         equation  = "-S_to_E_C",
+         initValue = "N_C-I_C"),
+    list(name      = "S_D",
+         equation  = "-S_to_E_D",
+         initValue = "N_D-I_D"))
 
   expect_equal(actual_obj, expected_obj)
 })
@@ -392,8 +581,85 @@ test_that("create_dims_obj() returns the expected object", {
   </root>')
 
   actual_obj <- create_dims_obj(test_xml)
-  expected_obj <- list(Age = c(1:4),
-                       Interactions = c("b11", "b12"))
+  expected_obj <- list(global_dims = list(Age = c(1:4),
+                                          Interactions = c("b11", "b12")),
+                       dictionary = NULL)
+
+  expect_equal(actual_obj, expected_obj)
+
+
+  filepath <- "./2d_pop.xmile"
+  test_xml <- xml2::read_xml(filepath)
+  actual_obj <- create_dims_obj(test_xml)
+
+  expected_obj <- list(global_dims = list(Age = c("Young", "Old"),
+                                          Region = c("Westeros", "Essos")),
+                       dictionary = list(Population  = c("Region", "Age"),
+                                         Net_growth  = c("Region", "Age"),
+                                         Growth_rate = c("Region", "Age"),
+                                         init_pop    = c("Region", "Age")))
+
+  expect_equal(actual_obj, expected_obj)
+
+  filepath <- "./test_models/vec_pop.stmx"
+
+  test_xml <- xml2::read_xml(filepath)
+  actual_obj <- create_dims_obj(test_xml)
+
+  expected_obj <- list(global_dims = list(Region = 1:2),
+                       dictionary = list(Population  = "Region",
+                                         net_growth  = "Region",
+                                         growth_rate = "Region",
+                                         init_pop    = "Region"))
 
   expect_equal(actual_obj, expected_obj)
 })
+
+# get_init_value()--------------------------------------------------------------
+
+
+
+test_that("get_init_value() returns the expected list", {
+
+  stock_obj <- list(name      = "S",
+                    equation  = "-S_to_E",
+                    initValue = "n - I0")
+
+  auxs <- list(list(name     = "n",
+                    equation = 10000),
+               list(name     = "I0",
+                    equation = 1))
+
+  actual <- get_init_value(stock_obj, auxs, NULL)
+
+  expected <- list(name      = "S",
+                   equation  = "-S_to_E",
+                   initValue = 9999)
+
+  expect_equal(actual, expected)
+
+})
+
+test_that("get_init_value() returns the expected list with fixed init", {
+
+  stock_obj <- list(name      = "S",
+                    equation  = "-S_to_E",
+                    initValue = "n - I0")
+
+  auxs <- list(list(name     = "n",
+                    equation = 10000),
+               list(name     = "I0",
+                    equation = 1))
+
+  fixed_inits <- "I0"
+
+  actual <- get_init_value(stock_obj, auxs, fixed_inits)
+
+  expected <- list(name      = "S",
+                   equation  = "-S_to_E",
+                   initValue = "(10000) - I0")
+
+  expect_equal(actual, expected)
+
+})
+

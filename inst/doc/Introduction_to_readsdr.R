@@ -12,7 +12,7 @@ knitr::include_graphics(filepath)
 library(readsdr)
 
 filepath <- system.file("models/", "SIR.stmx", package = "readsdr")
-mdl      <- read_xmile(filepath) 
+mdl      <- read_xmile(filepath, graph = TRUE) 
 
 ## -----------------------------------------------------------------------------
 description <- mdl$description

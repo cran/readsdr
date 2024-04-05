@@ -13,7 +13,8 @@ sd_sensitivity_run(
   timestep = NULL,
   integ_method = "euler",
   multicore = FALSE,
-  n_cores = NULL
+  n_cores = NULL,
+  reporting_interval = 1
 )
 }
 \arguments{
@@ -21,23 +22,33 @@ sd_sensitivity_run(
 
 \item{consts_df}{A data frame that contains the values of constants to
 simulate. Each column corresponds to a constant and each row to an
-iteration.}
+iteration. If \code{stocks_df} is also supplied, both data frames must have
+the same number of rows.}
 
 \item{stocks_df}{A data frame that containts the initial value of stocks to
-be explored. Each column corresponds to a stock and each row to an iteration.}
+be explored. Each column corresponds to a stock and each row to an
+iteration. If \code{consts_df} is also supplied, both data frames must have
+the same number of rows.}
 
-\item{start_time}{A number}
+\item{start_time}{A number indicating the time at which the simulation begins.}
 
-\item{stop_time}{A number}
+\item{stop_time}{A number indicating the time at which the simulation ends.}
 
-\item{timestep}{A number}
+\item{timestep}{A number indicating the time interval for the simulation.
+Also known as \code{dt}.}
 
-\item{integ_method}{A string. Either "euler" or "rk4"}
+\item{integ_method}{A string indicating the integration method. It can be
+either "euler" or "rk4"}
 
 \item{multicore}{A boolean value that indicates whether the process
-is parallelised. This option only works for Unix-based systems.}
+is parallelised.}
 
-\item{n_cores}{An integer.}
+\item{n_cores}{An integer indicating the number of cores for the parallel run.}
+
+\item{reporting_interval}{A real number indicating the interval at which the
+simulation results are returned. The default is set to \code{1}. For
+instance, if the simulation runs from 0 to 10. This function returns the
+results at times 0, 1, 2, ..., 10.}
 }
 \value{
 A data frame

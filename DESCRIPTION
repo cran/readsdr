@@ -1,7 +1,7 @@
 Package: readsdr
 Type: Package
 Title: Translate Models from System Dynamics Software into 'R'
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: person("Jair", "Andrade", email = "jair.albert.andrade@gmail.com", 
                   role = c("aut", "cre"),
                   comment = c(ORCID = "0000-0002-1412-7868"))
@@ -14,15 +14,17 @@ Description: The goal of 'readsdr' is to bridge the design capabilities from
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.1.0
-Suggests: testthat (>= 2.1.0), igraph, knitr, rmarkdown, ggplot2, tidyr
+RoxygenNote: 7.3.1
+Suggests: testthat (>= 2.1.0), igraph, knitr, rmarkdown, ggplot2,
+        tidyr, truncnorm
 Imports: stringr, xml2, purrr, dplyr, rlang, stringi, magrittr, stats,
-        deSolve, parallel
+        deSolve, utils, future, future.apply, progressr
 BugReports: https://github.com/jandraor/readsdr/issues
 VignetteBuilder: knitr
+Depends: R (>= 4.1.0)
 NeedsCompilation: no
-Packaged: 2021-01-08 13:51:14 UTC; jandraor
+Packaged: 2024-04-05 15:40:16 UTC; jandraor
 Author: Jair Andrade [aut, cre] (<https://orcid.org/0000-0002-1412-7868>)
 Maintainer: Jair Andrade <jair.albert.andrade@gmail.com>
 Repository: CRAN
-Date/Publication: 2021-01-08 16:00:02 UTC
+Date/Publication: 2024-04-05 15:50:02 UTC
